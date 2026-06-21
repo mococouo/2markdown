@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "two-markdown"
+version = "0.2.0"
+description = "Batch convert common files into Obsidian-friendly Markdown."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "2Markdown" }]
+license = "MIT"
+keywords = ["markdown", "obsidian", "converter", "documents", "batch"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Environment :: Win32 (MS Windows)",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business",
+  "Topic :: Text Processing :: Markup :: Markdown",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+office = [
+  "openpyxl>=3.1",
+  "python-docx>=1.1",
+  "python-pptx>=0.6",
+]
+pdf = [
+  "pypdf>=4.0",
+  "pdfplumber>=0.10",
+]
+web = [
+  "beautifulsoup4>=4.12",
+  "markdownify>=0.11",
+]
+image = [
+  "Pillow>=10.0",
+]
+ocr = [
+  "Pillow>=10.0",
+  "pytesseract>=0.3",
+  "PyMuPDF>=1.24",
+]
+audio = [
+  "faster-whisper>=1.0",
+]
+email = [
+  "extract-msg>=0.48",
+]
+markup = [
+  "docutils>=0.20",
+]
+gui = [
+  "tkinterdnd2>=0.3",
+]
+all = [
+  "beautifulsoup4>=4.12",
+  "markdownify>=0.11",
+  "openpyxl>=3.1",
+  "pypdf>=4.0",
+  "pdfplumber>=0.10",
+  "python-docx>=1.1",
+  "python-pptx>=0.6",
+  "Pillow>=10.0",
+  "pytesseract>=0.3",
+  "PyMuPDF>=1.24",
+  "faster-whisper>=1.0",
+  "extract-msg>=0.48",
+  "docutils>=0.20",
+  "tkinterdnd2>=0.3",
+]
+
+[project.scripts]
+2markdown = "two_markdown.cli:main"
+two-markdown = "two_markdown.cli:main"
+
+[project.entry-points."two_markdown.converters"]
+
+[tool.setuptools.packages.find]
+include = ["two_markdown*"]
