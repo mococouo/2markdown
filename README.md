@@ -8,6 +8,8 @@
 
 It is built for people who already have a messy folder of PDFs, Office files, emails, notebooks, web pages, transcripts, ebooks, and text files, and want a clean Markdown vault with attachments, metadata, and conversion reports.
 
+> Built with AI coding models. Designed from real workflow problems.
+
 ## Highlights
 
 - Desktop app with drag-and-drop support when `tkinterdnd2` is installed.
@@ -16,6 +18,10 @@ It is built for people who already have a messy folder of PDFs, Office files, em
 - Optional converter groups so users only install the heavy dependencies they need.
 - Conversion reports for success, failure, skipped files, warnings, and output paths.
 - English UI by default, with language switching available in the app.
+
+## Download
+
+Download source archives and future packaged builds from [GitHub Releases](https://github.com/mococouo/2markdown/releases), or run directly from this repository with Python.
 
 ## Quick Start
 
