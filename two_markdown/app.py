@@ -19,7 +19,7 @@ from .dependencies import (
 )
 from .errors import MissingDependencyError
 from .models import BatchSummary, ConversionOptions, ConversionRecord
-from .ui_theme import DND_AVAILABLE, PALETTE, DropZone, apply_theme
+from .ui_theme import DND_AVAILABLE, FONT_FAMILY, PALETTE, DropZone, apply_theme
 
 try:
     from tkinterdnd2 import TkinterDnD  # type: ignore
@@ -35,9 +35,8 @@ class MarkdownApp(_BaseTk):
         self._config = load_config()
         i18n.set_language(self._config.get("language", "en"))
         self.title("2Markdown")
-        self.geometry("1060x780")
-        self.minsize(880, 620)
-        self.configure(background=PALETTE["bg"])
+        self.geometry("1180x760")
+        self.minsize(980, 660)
 
         self.source_var = tk.StringVar(value=self._config.get("last_source", ""))
         self.output_var = tk.StringVar(value=self._config.get("last_output", ""))
@@ -58,6 +57,7 @@ class MarkdownApp(_BaseTk):
         self.concurrency_var = tk.IntVar(value=int(self._config.get("concurrency", 1)))
         self.max_size_var = tk.StringVar(value=str(self._config.get("max_size_mb", "")))
         self.lang_var = tk.StringVar(value=i18n.current_language())
+        self.dark_mode_var = tk.BooleanVar(value=bool(self._config.get("dark_mode", False)))
         self.status_var = tk.StringVar(value=i18n.t("status_idle"))
         self.progress_var = tk.DoubleVar(value=0)
 
@@ -68,58 +68,108 @@ class MarkdownApp(_BaseTk):
         self._counts = {"success": 0, "failed": 0, "skipped": 0}
         self._advanced_visible = False
 
-        apply_theme(self)
+        apply_theme(self, dark=self.dark_mode_var.get())
+        self.configure(background=PALETTE["bg"])
         self._build_ui()
         self._apply_texts()
         self._maybe_offer_install()
         self.after(100, self._poll_queue)
 
     def _build_ui(self) -> None:
-        outer = ttk.Frame(self, padding=(20, 16, 20, 16))
-        outer.pack(fill=tk.BOTH, expand=True)
-        outer.columnconfigure(0, weight=1)
-        outer.rowconfigure(4, weight=1)
+        shell = ttk.Frame(self)
+        shell.pack(fill=tk.BOTH, expand=True)
+        shell.columnconfigure(0, weight=1)
+        shell.rowconfigure(0, weight=1)
 
-        self._build_header(outer)
-        self._build_drop_zones(outer)
-        self._build_options(outer)
-        self._build_actions(outer)
-        self._build_results(outer)
-        self._build_progress(outer)
+        self.scroll_canvas = tk.Canvas(shell, bg=PALETTE["bg"], highlightthickness=0, bd=0)
+        self.scroll_canvas.grid(row=0, column=0, sticky=tk.NSEW)
+        self.scrollbar = ttk.Scrollbar(shell, orient=tk.VERTICAL, command=self.scroll_canvas.yview)
+        self.scrollbar.grid(row=0, column=1, sticky=tk.NS)
+        self.scroll_canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        outer = ttk.Frame(self.scroll_canvas, padding=(28, 22, 28, 22))
+        self.scroll_window = self.scroll_canvas.create_window((0, 0), window=outer, anchor=tk.NW)
+        outer.bind("<Configure>", self._update_scroll_region)
+        self.scroll_canvas.bind("<Configure>", self._resize_scroll_window)
+        self.scroll_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(1, weight=1)
+
+        self._build_topbar(outer)
+
+        main = ttk.Frame(outer)
+        main.grid(row=1, column=0, sticky=tk.NSEW)
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(4, weight=1)
+
+        self._build_header(main)
+        self._build_drop_zones(main)
+        self._build_options(main)
+        self._build_actions(main)
+        self._build_results(main)
+        self._build_progress(main)
+
+    def _update_scroll_region(self, _event: object = None) -> None:
+        self.scroll_canvas.configure(scrollregion=self.scroll_canvas.bbox("all"))
+
+    def _resize_scroll_window(self, event: tk.Event) -> None:
+        self.scroll_canvas.itemconfigure(self.scroll_window, width=event.width)
+
+    def _on_mousewheel(self, event: tk.Event) -> None:
+        if event.delta:
+            self.scroll_canvas.yview_scroll(int(-event.delta / 120), "units")
+
+    def _build_topbar(self, parent: ttk.Frame) -> None:
+        topbar = ttk.Frame(parent, style="Card.TFrame", padding=(18, 14))
+        topbar.grid(row=0, column=0, sticky=tk.EW, pady=(0, 18))
+        topbar.columnconfigure(1, weight=1)
+
+        self.badge = tk.Canvas(topbar, width=52, height=52, bg=PALETTE["card"], highlightthickness=0)
+        self.badge.grid(row=0, column=0, sticky=tk.W, padx=(0, 14), rowspan=2)
+        self._draw_badge()
+
+        self.title_label = ttk.Label(topbar, text="2Markdown", style="CardTitle.TLabel")
+        self.title_label.grid(row=0, column=1, sticky=tk.W)
+        self.subtitle_label = ttk.Label(topbar, style="MutedCard.TLabel", wraplength=620, justify=tk.LEFT)
+        self.subtitle_label.grid(row=1, column=1, sticky=tk.W, pady=(2, 0))
+
+        controls = ttk.Frame(topbar, style="Card.TFrame")
+        controls.grid(row=0, column=2, rowspan=2, sticky=tk.E)
+        self.theme_toggle = ttk.Checkbutton(
+            controls,
+            variable=self.dark_mode_var,
+            command=self._toggle_theme,
+            style="CardCheck.TCheckbutton",
+        )
+        self.theme_toggle.grid(row=0, column=0, sticky=tk.E, padx=(0, 12))
+        self.lang_label = ttk.Label(controls, style="MutedCard.TLabel")
+        self.lang_label.grid(row=0, column=1, sticky=tk.E, padx=(0, 6))
+        self.lang_combo = ttk.Combobox(controls, textvariable=self.lang_var, state="readonly", width=14)
+        self.lang_combo["values"] = [name for _code, name in i18n.available_languages()]
+        self.lang_var.set(self._display_for_code(i18n.current_language()))
+        self.lang_combo.grid(row=0, column=2, sticky=tk.E)
+        self.lang_combo.bind("<<ComboboxSelected>>", self._change_language)
+        self.dnd_note = ttk.Label(controls, style="MutedCard.TLabel", wraplength=260)
+        self.dnd_note.grid(row=1, column=0, columnspan=3, sticky=tk.E, pady=(8, 0))
+
+    def _draw_badge(self) -> None:
+        self.badge.configure(bg=PALETTE["card"])
+        self.badge.delete("all")
+        self.badge.create_oval(2, 2, 50, 50, fill=PALETTE["accent"], outline="")
+        self.badge.create_text(27, 28, text="2M", fill="#ffffff", font=(FONT_FAMILY, 16, "bold"))
 
     def _build_header(self, parent: ttk.Frame) -> None:
         header = ttk.Frame(parent)
-        header.grid(row=0, column=0, sticky=tk.EW, pady=(0, 14))
-        header.columnconfigure(1, weight=1)
-        badge = tk.Canvas(header, width=44, height=44, bg=PALETTE["bg"], highlightthickness=0)
-        badge.create_oval(2, 2, 42, 42, fill=PALETTE["accent"], outline="")
-        badge.create_text(22, 23, text="2M", fill="#ffffff", font=("Segoe UI Semibold", 14))
-        badge.grid(row=0, column=0, padx=(0, 14), rowspan=2)
-        titles = ttk.Frame(header)
-        titles.grid(row=0, column=1, sticky=tk.W)
-        self.title_label = ttk.Label(titles, text="2Markdown", style="Title.TLabel")
-        self.title_label.pack(anchor=tk.W)
-        self.subtitle_label = ttk.Label(titles, style="Subtitle.TLabel")
-        self.subtitle_label.pack(anchor=tk.W)
-
-        right = ttk.Frame(header)
-        right.grid(row=0, column=2, sticky=tk.NE)
-        lang_row = ttk.Frame(right)
-        lang_row.pack(anchor=tk.E)
-        self.lang_combo = ttk.Combobox(lang_row, textvariable=self.lang_var, state="readonly", width=14)
-        self.lang_combo["values"] = [name for _code, name in i18n.available_languages()]
-        self.lang_combo.pack(side=tk.RIGHT)
-        self.lang_label = ttk.Label(lang_row, style="Muted.TLabel")
-        self.lang_label.pack(side=tk.RIGHT, padx=(0, 6))
-        self.lang_combo.bind("<<ComboboxSelected>>", self._change_language)
-        stats_row = ttk.Frame(right)
-        stats_row.pack(anchor=tk.E, pady=(8, 0))
-        self._stat_success = self._stat_card(stats_row, "success", PALETTE["success"], 0)
-        self._stat_success.grid(row=0, column=0, padx=(0, 6))
-        self._stat_failed = self._stat_card(stats_row, "failed", PALETTE["danger"], 0)
-        self._stat_failed.grid(row=0, column=1, padx=6)
-        self._stat_skipped = self._stat_card(stats_row, "skipped", PALETTE["skipped"], 0)
-        self._stat_skipped.grid(row=0, column=2, padx=(6, 0))
+        header.grid(row=0, column=0, sticky=tk.EW, pady=(0, 16))
+        header.columnconfigure(0, weight=1)
+        self.workspace_title = ttk.Label(header, style="Hero.TLabel")
+        self.workspace_title.grid(row=0, column=0, sticky=tk.W)
+        self.workspace_subtitle = ttk.Label(header, style="Subtitle.TLabel", wraplength=720)
+        self.workspace_subtitle.grid(row=1, column=0, sticky=tk.W, pady=(3, 0))
+        chips = ttk.Frame(header)
+        chips.grid(row=0, column=1, rowspan=2, sticky=tk.E)
+        for text in ("Office", "PDF", "Web", "Email", "OCR"):
+            ttk.Label(chips, text=text, style="Chip.TLabel").pack(side=tk.LEFT, padx=(8, 0))
 
     def _stat_card(self, parent: tk.Widget, caption_key: str, color: str, value: int) -> ttk.Frame:
         card = ttk.Frame(parent, style="Card.TFrame", padding=(16, 8))
@@ -141,31 +191,37 @@ class MarkdownApp(_BaseTk):
     def _build_drop_zones(self, parent: ttk.Frame) -> None:
         row = ttk.Frame(parent)
         row.grid(row=1, column=0, sticky=tk.EW, pady=(0, 14))
-        row.columnconfigure(0, weight=1, uniform="zone")
-        row.columnconfigure(1, weight=1, uniform="zone")
+        row.columnconfigure(0, weight=1)
         self.source_zone = DropZone(
             row, "", "",
             on_browse=self._choose_source, on_drop=self._drop_source,
+            height=196,
             change_hint=i18n.t("or_click_browse"),
         )
-        self.source_zone.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 10))
-        self.output_zone = DropZone(
-            row, "", "",
-            on_browse=self._choose_output, on_drop=self._drop_output,
-            change_hint=i18n.t("or_click_browse"),
-        )
-        self.output_zone.grid(row=0, column=1, sticky=tk.NSEW, padx=(10, 0))
+        self.source_zone.grid(row=0, column=0, sticky=tk.NSEW)
+
+        output_row = ttk.Frame(row, style="Card.TFrame", padding=(14, 10))
+        output_row.grid(row=1, column=0, sticky=tk.EW, pady=(10, 0))
+        output_row.columnconfigure(0, weight=1)
+        self.output_summary_var = tk.StringVar()
+        self.output_summary_label = ttk.Label(output_row, textvariable=self.output_summary_var, style="MutedCard.TLabel")
+        self.output_summary_label.grid(row=0, column=0, sticky=tk.W)
+        self.output_button = ttk.Button(output_row, style="Ghost.TButton", command=self._choose_output)
+        self.output_button.grid(row=0, column=1, sticky=tk.E)
+        self._update_output_summary()
 
     def _build_options(self, parent: ttk.Frame) -> None:
         wrap = ttk.Frame(parent)
         wrap.grid(row=2, column=0, sticky=tk.EW, pady=(0, 12))
         wrap.columnconfigure(0, weight=1)
+        self.options_title = ttk.Label(wrap, style="Section.TLabel")
+        self.options_title.grid(row=0, column=0, sticky=tk.W, pady=(0, 7))
 
         primary = ttk.Frame(wrap, style="Card.TFrame", padding=14)
-        primary.grid(row=0, column=0, sticky=tk.EW)
-        primary.columnconfigure(2, weight=1)
-        for col in range(4):
+        primary.grid(row=1, column=0, sticky=tk.EW)
+        for col in range(2):
             primary.columnconfigure(col, weight=1)
+        primary.columnconfigure(2, weight=0)
         self.primary_checks: list[ttk.Checkbutton] = []
         self.primary_check_keys = [
             ("keep_tree", self.preserve_tree_var),
@@ -174,11 +230,12 @@ class MarkdownApp(_BaseTk):
             ("metadata", self.metadata_var),
         ]
         for index, (key, var) in enumerate(self.primary_check_keys):
+            row, column = divmod(index, 2)
             cb = ttk.Checkbutton(primary, text=i18n.t(key), variable=var, style="CardCheck.TCheckbutton")
-            cb.grid(row=0, column=index, sticky=tk.W, padx=(0, 12))
+            cb.grid(row=row, column=column, sticky=tk.W, padx=(0, 18), pady=3)
             self.primary_checks.append(cb)
         self.advanced_toggle = ttk.Button(primary, text=i18n.t("show_advanced"), style="Ghost.TButton", command=self._toggle_advanced)
-        self.advanced_toggle.grid(row=0, column=4, sticky=tk.E)
+        self.advanced_toggle.grid(row=0, column=2, rowspan=2, sticky=tk.E)
 
         self.advanced_card = ttk.Frame(wrap, style="Card.TFrame", padding=14)
         for col in range(4):
@@ -199,48 +256,67 @@ class MarkdownApp(_BaseTk):
             cb.grid(row=r, column=c, sticky=tk.W, padx=(0, 12), pady=4)
             self.advanced_checks.append(cb)
         inputs = ttk.Frame(self.advanced_card, style="Card.TFrame")
-        inputs.grid(row=4, column=0, columnspan=4, sticky=tk.W, pady=(10, 0))
+        inputs.grid(row=4, column=0, columnspan=4, sticky=tk.EW, pady=(10, 0))
+        for col in range(8):
+            inputs.columnconfigure(col, weight=0)
+        inputs.columnconfigure(7, weight=1)
         self.lbl_concurrency = ttk.Label(inputs, style="MutedCard.TLabel")
-        self.lbl_concurrency.pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Spinbox(inputs, from_=1, to=16, width=4, textvariable=self.concurrency_var).pack(side=tk.LEFT, padx=(0, 16))
+        self.lbl_concurrency.grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
+        ttk.Spinbox(inputs, from_=1, to=16, width=4, textvariable=self.concurrency_var).grid(row=0, column=1, sticky=tk.W, padx=(0, 16))
         self.lbl_ocr_lang = ttk.Label(inputs, style="MutedCard.TLabel")
-        self.lbl_ocr_lang.pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Entry(inputs, textvariable=self.ocr_lang_var, width=12).pack(side=tk.LEFT, padx=(0, 16))
+        self.lbl_ocr_lang.grid(row=0, column=2, sticky=tk.W, padx=(0, 6))
+        ttk.Entry(inputs, textvariable=self.ocr_lang_var, width=12).grid(row=0, column=3, sticky=tk.W, padx=(0, 16))
         self.lbl_audio_lang = ttk.Label(inputs, style="MutedCard.TLabel")
-        self.lbl_audio_lang.pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Entry(inputs, textvariable=self.audio_lang_var, width=10).pack(side=tk.LEFT, padx=(0, 16))
+        self.lbl_audio_lang.grid(row=0, column=4, sticky=tk.W, padx=(0, 6))
+        ttk.Entry(inputs, textvariable=self.audio_lang_var, width=10).grid(row=0, column=5, sticky=tk.W, padx=(0, 16))
         self.lbl_max_size = ttk.Label(inputs, style="MutedCard.TLabel")
-        self.lbl_max_size.pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Entry(inputs, textvariable=self.max_size_var, width=8).pack(side=tk.LEFT)
+        self.lbl_max_size.grid(row=0, column=6, sticky=tk.W, padx=(0, 6))
+        ttk.Entry(inputs, textvariable=self.max_size_var, width=8).grid(row=0, column=7, sticky=tk.W)
 
     def _toggle_advanced(self) -> None:
         self._advanced_visible = not self._advanced_visible
         if self._advanced_visible:
-            self.advanced_card.grid(row=1, column=0, sticky=tk.EW, pady=(8, 0))
+            self.advanced_card.grid(row=2, column=0, sticky=tk.EW, pady=(8, 0))
             self.advanced_toggle.configure(text=i18n.t("hide_advanced"))
         else:
             self.advanced_card.grid_forget()
             self.advanced_toggle.configure(text=i18n.t("show_advanced"))
 
     def _build_actions(self, parent: ttk.Frame) -> None:
-        bar = ttk.Frame(parent)
+        bar = ttk.Frame(parent, style="Action.TFrame", padding=(16, 12))
         bar.grid(row=3, column=0, sticky=tk.EW, pady=(0, 12))
-        self.start_button = ttk.Button(bar, text=i18n.t("start"), style="Primary.TButton", command=self._start)
+        bar.columnconfigure(0, weight=1)
+        self.action_status = ttk.Label(bar, textvariable=self.status_var, style="ActionStatus.TLabel", wraplength=520)
+        self.action_status.grid(row=0, column=0, sticky=tk.W)
+        buttons = ttk.Frame(bar, style="Action.TFrame")
+        buttons.grid(row=0, column=1, sticky=tk.E)
+        self.start_button = ttk.Button(buttons, text=i18n.t("start"), style="Primary.TButton", command=self._start)
         self.start_button.pack(side=tk.LEFT)
-        self.cancel_button = ttk.Button(bar, text=i18n.t("cancel"), style="Danger.TButton", command=self._cancel, state=tk.DISABLED)
+        self.cancel_button = ttk.Button(buttons, text=i18n.t("cancel"), style="Danger.TButton", command=self._cancel, state=tk.DISABLED)
         self.cancel_button.pack(side=tk.LEFT, padx=(10, 0))
-        self.open_button = ttk.Button(bar, text=i18n.t("open_output"), style="Ghost.TButton", command=self._open_output, state=tk.DISABLED)
+        self.open_button = ttk.Button(buttons, text=i18n.t("open_output"), style="Ghost.TButton", command=self._open_output, state=tk.DISABLED)
         self.open_button.pack(side=tk.LEFT, padx=(10, 0))
-        self.install_button = ttk.Button(bar, text=i18n.t("install"), style="Ghost.TButton", command=self._click_install)
+        self.install_button = ttk.Button(buttons, text=i18n.t("install"), style="Ghost.TButton", command=self._click_install)
         self.install_button.pack(side=tk.LEFT, padx=(10, 0))
-        self.dnd_note = ttk.Label(bar, style="Muted.TLabel")
-        self.dnd_note.pack(side=tk.LEFT, padx=(12, 0))
 
     def _build_results(self, parent: ttk.Frame) -> None:
-        paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
-        paned.grid(row=4, column=0, sticky=tk.NSEW, pady=(0, 8))
+        section = ttk.Frame(parent)
+        section.grid(row=4, column=0, sticky=tk.NSEW, pady=(0, 8))
+        section.columnconfigure(0, weight=1)
+        section.rowconfigure(1, weight=1)
+        self.activity_title = ttk.Label(section, style="Section.TLabel")
+        self.activity_title.grid(row=0, column=0, sticky=tk.W, pady=(0, 7))
+        stats_row = ttk.Frame(section)
+        stats_row.grid(row=0, column=1, sticky=tk.E, pady=(0, 7))
+        self._stat_success = self._stat_card(stats_row, "success", PALETTE["success"], 0)
+        self._stat_success.grid(row=0, column=0, padx=(0, 8))
+        self._stat_failed = self._stat_card(stats_row, "failed", PALETTE["danger"], 0)
+        self._stat_failed.grid(row=0, column=1, padx=(0, 8))
+        self._stat_skipped = self._stat_card(stats_row, "skipped", PALETTE["skipped"], 0)
+        self._stat_skipped.grid(row=0, column=2)
 
-        table_card = ttk.Frame(paned, style="Card.TFrame", padding=2)
+        table_card = ttk.Frame(section, style="Card.TFrame", padding=2)
+        table_card.grid(row=1, column=0, columnspan=2, sticky=tk.NSEW)
         table_card.columnconfigure(0, weight=1)
         table_card.rowconfigure(0, weight=1)
         columns = ("status", "source", "output", "message")
@@ -256,23 +332,6 @@ class MarkdownApp(_BaseTk):
         vsb = ttk.Scrollbar(table_card, orient=tk.VERTICAL, command=self.table.yview)
         vsb.grid(row=0, column=1, sticky=tk.NS)
         self.table.configure(yscrollcommand=vsb.set)
-        paned.add(table_card, weight=3)
-
-        log_card = ttk.Frame(paned, style="Card.TFrame", padding=8)
-        log_card.columnconfigure(0, weight=1)
-        log_card.rowconfigure(1, weight=1)
-        self.log_label = ttk.Label(log_card, style="MutedCard.TLabel")
-        self.log_label.grid(row=0, column=0, sticky=tk.W)
-        self.log_text = tk.Text(log_card, height=6, bg=PALETTE["card"], fg=PALETTE["text"],
-                                relief="flat", bd=0, font=("Consolas", 9), wrap=tk.WORD,
-                                highlightthickness=1, highlightbackground=PALETTE["border"],
-                                highlightcolor=PALETTE["border"], padx=8, pady=6)
-        self.log_text.grid(row=1, column=0, sticky=tk.NSEW)
-        self.log_text.configure(state=tk.DISABLED)
-        hsb = ttk.Scrollbar(log_card, orient=tk.HORIZONTAL, command=self.log_text.xview)
-        hsb.grid(row=2, column=0, sticky=tk.EW)
-        self.log_text.configure(xscrollcommand=hsb.set)
-        paned.add(log_card, weight=1)
 
     def _build_progress(self, parent: ttk.Frame) -> None:
         bar = ttk.Frame(parent)
@@ -286,12 +345,16 @@ class MarkdownApp(_BaseTk):
     def _apply_texts(self) -> None:
         self.title_label.configure(text=i18n.t("app_title"))
         self.subtitle_label.configure(text=i18n.t("app_subtitle"))
+        self.workspace_title.configure(text=i18n.t("workspace_title"))
+        self.workspace_subtitle.configure(text=i18n.t("workspace_subtitle"))
+        self.options_title.configure(text=i18n.t("output_defaults"))
+        self.activity_title.configure(text=i18n.t("activity_title"))
         self.source_zone.set_texts(i18n.t("source_zone_title"), i18n.t("source_zone_hint"), i18n.t("or_click_browse"))
-        self.output_zone.set_texts(i18n.t("output_zone_title"), i18n.t("output_zone_hint"), i18n.t("or_click_browse"))
         if self.source_var.get():
-            self.source_zone.set_path(self.source_var.get())
-        if self.output_var.get():
-            self.output_zone.set_path(self.output_var.get())
+            display_name = self._source_include[0] if self._source_include else (Path(self.source_var.get()).name or self.source_var.get())
+            self.source_zone.set_path(display_name)
+        self.output_button.configure(text=i18n.t("choose_output"))
+        self._update_output_summary()
         for cb, (key, _var) in zip(self.primary_checks, self.primary_check_keys):
             cb.configure(text=i18n.t(key))
         for cb, (key, _var) in zip(self.advanced_checks, self.advanced_check_keys):
@@ -301,12 +364,12 @@ class MarkdownApp(_BaseTk):
         self.cancel_button.configure(text=i18n.t("cancel"))
         self.open_button.configure(text=i18n.t("open_output"))
         self.install_button.configure(text=i18n.t("install"))
+        self.theme_toggle.configure(text=i18n.t("dark_mode"))
         self.lang_label.configure(text=i18n.t("language"))
         self.lbl_concurrency.configure(text=i18n.t("concurrency"))
         self.lbl_ocr_lang.configure(text=i18n.t("ocr_lang"))
         self.lbl_audio_lang.configure(text=i18n.t("audio_lang"))
         self.lbl_max_size.configure(text=i18n.t("max_size"))
-        self.log_label.configure(text=i18n.t("log"))
         for col, key in zip(("status", "source", "output", "message"), ("col_status", "col_source", "col_output", "col_message")):
             self.table.heading(col, text=i18n.t(key))
         for card, key in ((self._stat_success, "success"), (self._stat_failed, "failed"), (self._stat_skipped, "skipped")):
@@ -326,16 +389,46 @@ class MarkdownApp(_BaseTk):
         save_config(self._config)
         self._apply_texts()
 
+    def _toggle_theme(self) -> None:
+        self._config["dark_mode"] = self.dark_mode_var.get()
+        save_config(self._config)
+        apply_theme(self, dark=self.dark_mode_var.get())
+        self._refresh_theme_widgets()
+
+    def _refresh_theme_widgets(self) -> None:
+        self.configure(background=PALETTE["bg"])
+        self.scroll_canvas.configure(bg=PALETTE["bg"])
+        self._draw_badge()
+        self.source_zone.refresh_theme()
+        self.table.tag_configure("success", foreground=PALETTE["success"])
+        self.table.tag_configure("failed", foreground=PALETTE["danger"])
+        self.table.tag_configure("skipped", foreground=PALETTE["skipped"])
+        for card, color in (
+            (self._stat_success, PALETTE["success"]),
+            (self._stat_failed, PALETTE["danger"]),
+            (self._stat_skipped, PALETTE["skipped"]),
+        ):
+            label = getattr(card, "_value_label", None)
+            if label is not None:
+                label.configure(foreground=color)
+
     def _code_for_display(self, display: str) -> str:
         for code, name in i18n.available_languages():
             if name == display:
                 return code
         return "en"
 
+    def _display_for_code(self, code: str) -> str:
+        for language_code, name in i18n.available_languages():
+            if language_code == code:
+                return name
+        return "English"
+
     def _choose_source(self) -> None:
-        target = filedialog.askdirectory(title=i18n.t("source_zone_title"))
+        target = filedialog.askopenfilename(title=i18n.t("source_zone_title"))
         if target:
-            self._set_source(target, is_file=False)
+            path = Path(target)
+            self._set_source(str(path.parent), is_file=True, include=path.name)
 
     def _choose_output(self) -> None:
         target = filedialog.askdirectory(title=i18n.t("output_zone_title"))
@@ -349,12 +442,10 @@ class MarkdownApp(_BaseTk):
         else:
             self._set_source(str(p), is_file=False)
 
-    def _drop_output(self, path: str) -> None:
-        self._set_output(path)
-
     def _set_source(self, path: str, *, is_file: bool = False, include: str | None = None) -> None:
         self.source_var.set(path)
-        self.source_zone.set_path(path if not is_file else f"{path} / {include}")
+        display_name = include if is_file and include else (Path(path).name or path)
+        self.source_zone.set_path(display_name)
         self._source_include = [include] if include else None
         self._config["last_source"] = path
         save_config(self._config)
@@ -363,9 +454,18 @@ class MarkdownApp(_BaseTk):
 
     def _set_output(self, path: str) -> None:
         self.output_var.set(path)
-        self.output_zone.set_path(path)
         self._config["last_output"] = path
         save_config(self._config)
+        self._update_output_summary()
+
+    def _update_output_summary(self) -> None:
+        if not hasattr(self, "output_summary_var"):
+            return
+        output = self.output_var.get().strip()
+        if output:
+            self.output_summary_var.set(i18n.t("output_summary", path=output))
+        else:
+            self.output_summary_var.set(i18n.t("output_summary_auto"))
 
     def _auto_set_output(self, source: Path) -> None:
         if not source.exists():
@@ -619,10 +719,7 @@ class MarkdownApp(_BaseTk):
         self._log(f"[{record.status}] {record.source_path.name} -> {label}")
 
     def _log(self, message: str) -> None:
-        self.log_text.configure(state=tk.NORMAL)
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        self.log_text.configure(state=tk.DISABLED)
+        return
 
     def _set_running(self, running: bool) -> None:
         self.start_button.configure(state=tk.DISABLED if running else tk.NORMAL)

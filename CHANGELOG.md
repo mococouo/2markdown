@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- Added a one-click `2Markdown.pyw` launcher for desktop users.
+- Redesigned the desktop UI into a simpler user-facing flow with one large input area.
+- Added dark mode, refreshed typography, softer visual styling, and page scrolling.
+- Removed the visible log panel and simplified output selection.
+- Kept English as the default language for new configurations.
+
 ## 0.2.0
 
 - Added a polished Tkinter desktop app with drag-and-drop support when `tkinterdnd2` is installed.

@@ -26,6 +26,7 @@ _DEFAULTS: dict[str, Any] = {
     "concurrency": 1,
     "max_size_mb": "",
     "asked_install_all": False,
+    "dark_mode": False,
 }
 
 
@@ -62,13 +63,4 @@ def save_config(values: dict[str, Any]) -> None:
 
 
 def default_language() -> str:
-    for env in ("2MARKDOWN_LANG", "LANG"):
-        value = os.environ.get(env)
-        if value:
-            base = value.split(".")[0].replace("_", "-")
-            if base in __import__("two_markdown.i18n", fromlist=["LANGUAGES"]).LANGUAGES:
-                return base
-            short = base.split("-")[0]
-            if short in __import__("two_markdown.i18n", fromlist=["LANGUAGES"]).LANGUAGES:
-                return short
     return "en"

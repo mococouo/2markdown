@@ -19,13 +19,21 @@ It is built for people who already have a messy folder of PDFs, Office files, em
 
 ## Quick Start
 
-From the project folder, run the desktop app:
+For normal desktop use, double-click:
+
+```text
+2Markdown.pyw
+```
+
+If this repository was downloaded with the `v0.20` folder at the top level, you can also double-click the `2Markdown.pyw` file in the repository root.
+
+For terminal-based troubleshooting, the same desktop app can still be launched with:
 
 ```powershell
 python -m two_markdown
 ```
 
-On Windows, launch without a console window:
+On Windows, the legacy no-console launcher is still available:
 
 ```text
 scripts/run_windows.pyw
@@ -108,11 +116,12 @@ tags:
 
 ## Desktop Workflow
 
-1. Drop a file or folder into the Source area.
-2. Drop an output folder, or let 2Markdown create `<source>_markdown` next to the source.
-3. Keep the default options for Obsidian imports.
-4. Click Convert.
-5. Open the output folder or review the conversion reports.
+1. Click the large input area to choose a file, or drop a file or folder onto it.
+2. Let 2Markdown create `<source>_markdown` next to the source, or click Change output.
+3. Use the Dark mode toggle in the top bar if you prefer a darker workspace.
+4. Keep the default options for Obsidian imports.
+5. Click Convert.
+6. Open the output folder or review the conversion reports.
 
 Advanced options such as overwrite, incremental runs, dry run, OCR, archive recursion, concurrency, and max file size are available behind the advanced panel.
 
